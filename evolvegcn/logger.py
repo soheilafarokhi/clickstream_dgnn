@@ -9,7 +9,11 @@ from sklearn.metrics import precision_score
 from scipy.sparse import coo_matrix
 import numpy as np
 import os
-
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
+import matplotlib.pyplot as plt
+import pandas as pd
+from sklearn.metrics import RocCurveDisplay
 
 
 
@@ -102,7 +106,7 @@ class Logger():
         self.lasttime = time.monotonic()
         self.ep_time = self.lasttime
 
-    def log_minibatch(self, predictions, true_classes, loss, **kwargs):
+    def log_minibatch(self, predictions, true_classes, loss, plot_results=False,label_binarizer=None, **kwargs):
 
         probs = torch.softmax(predictions,dim=1) #[:,1]
         if self.set in ['TEST', 'VALID'] and self.args.task == 'link_pred':
@@ -113,6 +117,9 @@ class Logger():
         MAP = torch.tensor(self.get_MAP(probs,true_classes, do_softmax=False))
 
         error, conf_mat_per_class = self.eval_predicitions(predictions, true_classes, self.num_classes)
+        if plot_results:
+            self.plot_confusion_matrix(predictions, true_classes, self.num_classes)
+            self.roc_auc_curve_ovr(label_binarizer, predictions, true_classes)
         conf_mat_per_class_at_k={}
         for k in self.eval_k_list:
             conf_mat_per_class_at_k[k] = self.eval_predicitions_at_k(predictions, true_classes, self.num_classes, k)
@@ -296,6 +303,54 @@ class Logger():
         #
         # return average_precision_score(true_classes_np, predictions_np)
 
+    def plot_confusion_matrix(self, predictions, true_classes, n_classes):
+        predicted_classes = predictions.argmax(dim=1)
+        predicted_classes = predicted_classes.cpu().numpy()
+        true_classes = true_classes.cpu().numpy()
+        cm = confusion_matrix(true_classes, predicted_classes)
+        cm_array = np.array(cm)
+
+        group_counts = ["{0:0.0f}".format(value) for value in
+                        cm_array.flatten()]
+        group_percentages = ["{0:.2%}".format(value) for value in
+                             cm_array.flatten() / np.sum(cm_array)]
+        labels = [f"{v2}\n{v3}" for v2, v3 in
+                  zip(group_counts, group_percentages)]
+        labels = np.asarray(labels).reshape(n_classes, n_classes)
+        sns.heatmap(cm_array, annot=labels, fmt='', cmap='Blues')
+        model_name = self.args.model
+        plt.ylabel('Actual Classes', fontweight='bold')
+        plt.xlabel('Predicted Classes', fontweight='bold')
+
+        moment = time.strftime("%H_%M_%S", time.localtime())
+        plt.savefig(f"./plots/cm_{model_name}.eps", dpi=400)
+        plt.show()
+
+    def roc_auc_curve_ovr(self, label_binarizer, y_score, y_test):
+        y_score = y_score.cpu().numpy()
+        y_test = y_test.cpu().numpy()
+        y_onehot_test = label_binarizer.transform(y_test)
+        n_classes = len(pd.unique(y_test))
+
+        for i in range(n_classes):
+            fig, ax = plt.subplots(figsize=(6, 6))
+            class_id = np.flatnonzero(label_binarizer.classes_ == i)[0]
+
+            RocCurveDisplay.from_predictions(
+                y_onehot_test[:, class_id],
+                y_score[:, class_id],
+                name=f'Class {i} vs the rest',
+                ax=ax
+            )
+
+            plt.plot([0, 1], [0, 1], "k--", label="Chance Level (AUC = 0.5)")
+            plt.axis("square")
+            plt.xlabel("False Positive Rate", fontweight='bold')
+            plt.ylabel("True Positive Rate", fontweight='bold')
+            plt.title(f"Class {i} vs Rest", fontweight='bold')
+            plt.legend()
+            plt.savefig(f"./plots/roc_curve_{i}.eps", dpi=400, bbox_inches='tight')
+            plt.show()
 
     def eval_predicitions(self, predictions, true_classes, num_classes):
         predicted_classes = predictions.argmax(dim=1)

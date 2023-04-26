@@ -108,11 +108,12 @@ def get_grid_best_estimator(classifier, X_train, y_train, param_grid):
     return grid_search
 
 
-def evaluate_results(classifier, X_test, y_test, result_file, n_classes=2):
+def evaluate_results(classifier, X_test, y_test, result_file=None, n_classes=2):
     y_pred = classifier.predict(X_test)
 
     print(classification_report(y_test, y_pred))
-    result_file.write('\n' + str(classification_report(y_test, y_pred)))
+    if result_file is not None:
+        result_file.write('\n' + str(classification_report(y_test, y_pred)))
     # print('Multi-label confusion matrix: ')
     # print(multilabel_confusion_matrix(y_test, y_pred))
 
@@ -136,6 +137,38 @@ def evaluate_results(classifier, X_test, y_test, result_file, n_classes=2):
     plt.show()
 
 
+def apply_grid_search_on_models():
+    file1.write(f"\nRandom Forest Classifier")
+    best_grid = get_grid_best_estimator(rf_classifier, X_train_transformed, y_train, random_forest_grid)
+    file1.write('\n' + str(best_grid.best_params_))
+    evaluate_results(best_grid.best_estimator_, X_test_transformed, y_test, file1, n_classes=2)
+    moment = time.strftime("%H_%M_%S", time.localtime())
+    save_model(best_grid.best_estimator_,
+               MODEL_FOLDER + f'{course}_{num_weeks}_weeks_{moment}_' + RANDOM_FOREST_CLASSIFIER)
+
+    file1.write(f"\nGradient Boosting Classifier")
+    best_grid = get_grid_best_estimator(gb_classifier, X_train_transformed, y_train, gb_grid)
+    file1.write('\n' + str(best_grid.best_params_))
+    evaluate_results(best_grid.best_estimator_, X_test_transformed, y_test, file1, n_classes=2)
+    moment = time.strftime("%H_%M_%S", time.localtime())
+    save_model(best_grid.best_estimator_,
+               MODEL_FOLDER + f'{course}_{num_weeks}_weeks_{moment}_' + GRADIENT_BOOSTING_CLASSIFIER)
+
+    file1.write(f"\nDecision Tree Classifier")
+    best_grid = get_grid_best_estimator(decision_tree_classifier, X_train_transformed, y_train, decision_tree_grid)
+    file1.write('\n' + str(best_grid.best_params_))
+    evaluate_results(best_grid.best_estimator_, X_test_transformed, y_test, file1, n_classes=2)
+    moment = time.strftime("%H_%M_%S", time.localtime())
+    save_model(best_grid.best_estimator_,
+               MODEL_FOLDER + f'{course}_{num_weeks}_weeks_{moment}_' + DECISION_TREE_CLASSIFIER)
+
+    file1.write(f"\nSVM Classifier")
+    best_random = get_random_best_estimator(svm_classifier, X_train_transformed, y_train, svm_grid)
+    file1.write('\n' + str(best_random.best_params_))
+    evaluate_results(best_random.best_estimator_, X_test_transformed, y_test, file1, n_classes=2)
+    save_model(best_random.best_estimator_, MODEL_FOLDER + f'{course}_{num_weeks}_weeks_' + SVM_CLASSIFIER)
+
+
 df = pd.read_csv('./data/clickstream_dataset_updated.csv')
 df.columns = range(df.columns.size)
 df.rename({0: 'timestamp', 1: 'course_id', 2: 'user_id'}, axis=1, inplace=True)
@@ -143,7 +176,6 @@ courses = pd.unique(df['course_id'])
 demo_length = 37
 weeks = [5, 10, 15, 20]
 
-### best model after randomized search cross validation
 
 # Number of trees in random forest
 n_estimators = [int(x) for x in np.linspace(start=200, stop=2000, num=10)]
@@ -211,7 +243,7 @@ for course in courses:
     test_demo = test_df.iloc[:, -1 * (demo_length + 1):]
     for num_weeks in weeks:
         print(f'Predicting for course {course} with {num_weeks} weeks.')
-        file1.write(f"Predicting for course {course} with {num_weeks} weeks.")
+        # file1.write(f"Predicting for course {course} with {num_weeks} weeks.")
         X_train = train_df.iloc[:, :num_weeks * 20]
         X_train = pd.concat([X_train, train_demo], axis=1, ignore_index=True)
         X_train = X_train.iloc[:, :-1].values
@@ -222,7 +254,6 @@ for course in courses:
         X_test = X_test.iloc[:, :-1].values
         y_test = test_df.iloc[:, -1:].values.ravel()
 
-
         rf_classifier = RandomForestClassifier()
         svm_classifier = svm.SVC()
         decision_tree_classifier = tree.DecisionTreeClassifier()
@@ -232,35 +263,22 @@ for course in courses:
         X_train_transformed = scaler.fit_transform(X_train)
         X_test_transformed = scaler.transform(X_test)
 
+        print('RF Classifier')
+        evaluate_results(rf_classifier, X_test_transformed, y_test, None, n_classes=2)
+        svm_classifier.fit(X_train_transformed, y_train)
 
-        file1.write(f"\nRandom Forest Classifier")
-        best_grid = get_grid_best_estimator(rf_classifier, X_train_transformed, y_train, random_forest_grid)
-        file1.write('\n' + str(best_grid.best_params_))
-        evaluate_results(best_grid.best_estimator_, X_test_transformed, y_test, file1, n_classes=2)
-        moment = time.strftime("%H_%M_%S", time.localtime())
-        save_model(best_grid.best_estimator_,
-                   MODEL_FOLDER + f'{course}_{num_weeks}_weeks_{moment}_' + RANDOM_FOREST_CLASSIFIER)
+        print('SVM Classifier')
+        evaluate_results(svm_classifier, X_test_transformed, y_test, None, n_classes=2)
+        decision_tree_classifier.fit(X_train_transformed, y_train)
 
-        file1.write(f"\nGradient Boosting Classifier")
-        best_grid = get_grid_best_estimator(gb_classifier, X_train_transformed, y_train, gb_grid)
-        file1.write('\n' + str(best_grid.best_params_))
-        evaluate_results(best_grid.best_estimator_, X_test_transformed, y_test, file1, n_classes=2)
-        moment = time.strftime("%H_%M_%S", time.localtime())
-        save_model(best_grid.best_estimator_,
-                   MODEL_FOLDER + f'{course}_{num_weeks}_weeks_{moment}_' + GRADIENT_BOOSTING_CLASSIFIER)
+        print('DT Classifier')
+        evaluate_results(decision_tree_classifier, X_test_transformed, y_test, None, n_classes=2)
 
-        file1.write(f"\nDecision Tree Classifier")
-        best_grid = get_grid_best_estimator(decision_tree_classifier, X_train_transformed, y_train, decision_tree_grid)
-        file1.write('\n' + str(best_grid.best_params_))
-        evaluate_results(best_grid.best_estimator_, X_test_transformed, y_test, file1, n_classes=2)
-        moment = time.strftime("%H_%M_%S", time.localtime())
-        save_model(best_grid.best_estimator_,
-                   MODEL_FOLDER + f'{course}_{num_weeks}_weeks_{moment}_' + DECISION_TREE_CLASSIFIER)
+        print('GB Classifier')
+        gb_classifier.fit(X_train_transformed, y_train)
+        evaluate_results(gb_classifier, X_test_transformed, y_test, None, n_classes=2)
 
-        file1.write(f"\nSVM Classifier")
-        best_random = get_random_best_estimator(svm_classifier, X_train_transformed, y_train, svm_grid)
-        file1.write('\n' + str(best_random.best_params_))
-        evaluate_results(best_random.best_estimator_, X_test_transformed, y_test, file1, n_classes=2)
-        save_model(best_random.best_estimator_, MODEL_FOLDER + f'{course}_{num_weeks}_weeks_' + SVM_CLASSIFIER)
+        #### This part is for applying grid search
+        # apply_grid_search_on_models()
 
 file1.close()

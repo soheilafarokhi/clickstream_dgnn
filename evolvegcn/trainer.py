@@ -7,6 +7,8 @@ from matplotlib import pyplot as plt
 import numpy as np
 import os
 
+from sklearn.preprocessing import LabelBinarizer
+
 
 class Trainer():
     def __init__(self, args, splitter, gcn, classifier, comp_loss, dataset, num_classes):
@@ -153,8 +155,11 @@ class Trainer():
             # print(loss)
             if set_name in ['TEST', 'VALID'] and self.args.task == 'link_pred':
                 self.logger.log_minibatch(predictions, s.label_sp['vals'], loss.detach(), adj=s.label_sp['idx'])
+            elif set_name in ['TRAIN']:
+                self.label_binarizer = LabelBinarizer().fit(s.label_sp['vals'].cpu().numpy())
+                self.logger.log_minibatch(predictions, s.label_sp['vals'], loss.detach(), plot_results=False)
             else:
-                self.logger.log_minibatch(predictions, s.label_sp['vals'], loss.detach())
+                self.logger.log_minibatch(predictions, s.label_sp['vals'], loss.detach(), plot_results=(set_name=='TEST'), label_binarizer=self.label_binarizer)
             if grad:
                 self.optim_step(loss)
         # self.gcn_scheduler.step()
